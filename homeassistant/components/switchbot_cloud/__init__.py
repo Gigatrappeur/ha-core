@@ -181,13 +181,34 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
     )
     await hass.config_entries.async_forward_entry_setups(config, PLATFORMS)
 
+    await _initialize_webhook(hass, config, api, coordinators_by_id)
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok
+
+
+async def _initialize_webhook(
+    hass: HomeAssistant,
+    config: ConfigEntry,
+    api: SwitchBotAPI,
+    coordinators_by_id: dict[str, SwitchBotCoordinator],
+) -> None:
+    """Initialize webhook if needed."""
     if any(
         coordinator.update_by_webhook() for coordinator in coordinators_by_id.values()
     ):
-        # Need webhook
+        # Need webhook because there coordinator updated by this
         if CONF_WEBHOOK_ID not in config.data or config.unique_id is None:
             new_data = config.data.copy()
             if CONF_WEBHOOK_ID not in new_data:
+                # create new id and new conf
                 new_data[CONF_WEBHOOK_ID] = webhook.async_generate_id()
 
             hass.config_entries.async_update_entry(
@@ -206,14 +227,15 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
                 DOMAIN,
                 webhook_name,
                 config.data[CONF_WEBHOOK_ID],
-                create_handle_webhook(coordinators_by_id),
+                _create_handle_webhook(coordinators_by_id),
             )
 
         webhook_url = webhook.async_generate_url(
             hass,
             config.data[CONF_WEBHOOK_ID],
         )
-        # check if webhook is configured
+
+        # check if webhook is configured in switchbot cloud
         check_webhook_result = None
         with contextlib.suppress(Exception):
             check_webhook_result = await api.get_webook_configuration()
@@ -239,23 +261,13 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
             # call api for register webhookurl
             await api.setup_webhook(webhook_url)
 
-    return True
 
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
-
-
-def create_handle_webhook(
+def _create_handle_webhook(
     coordinators_by_id: dict[str, SwitchBotCoordinator],
 ) -> Callable[[HomeAssistant, str, web.Request], Awaitable[None]]:
     """Create a webhook handler."""
 
-    async def internal_handle_webhook(
+    async def _internal_handle_webhook(
         hass: HomeAssistant, webhook_id: str, request: web.Request
     ) -> None:
         """Handle webhook callback."""
@@ -307,4 +319,4 @@ def create_handle_webhook(
 
         coordinators_by_id[deviceMac].async_set_updated_data(data["context"])
 
-    return internal_handle_webhook
+    return _internal_handle_webhook
