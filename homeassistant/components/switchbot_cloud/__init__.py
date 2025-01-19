@@ -12,7 +12,7 @@ from switchbot_api import CannotConnect, Device, InvalidAuth, Remote, SwitchBotA
 from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, CONF_API_TOKEN, CONF_WEBHOOK_ID, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN, ENTRY_TITLE
